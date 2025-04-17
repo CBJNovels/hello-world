@@ -1,73 +1,47 @@
-name: Nightly Build
+name: Nightly Build and Analysis
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 每天UTC时间00:00触发
-  workflow_dispatch:     # 允许手动触发
-
-# 添加必要权限
-permissions:
-  contents: write  # 必须的发布权限
+    - cron: "0 0 * * *" # 每天午夜触发
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  nightly-build-and-analysis:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-    
+
+    runs-on: ${{ matrix.os }}
+
     steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-    - name: 设置输出目录
-      run: mkdir -p bin  # 确保输出目录存在
-
-    - name: 安装依赖（Windows）
-      if: matrix.os == 'windows-latest'
+    - name: Install cppcheck
       run: |
-        choco install mingw -y
-        choco install cppcheck -y
+        if [ ${{ runner.os }} == 'Linux' ]; then
+          sudo apt-get install -y cppcheck;
+        elif [ ${{ runner.os }} == 'Windows' ]; then
+          choco install cppcheck;
+        fi
 
-    - name: 安装依赖（Linux）
-      if: matrix.os == 'ubuntu-latest'
+    - name: Run cppcheck
       run: |
-        sudo apt-get update
-        sudo apt-get install -y cppcheck
+        cppcheck --enable=all --xml --xml-version=2 src 2> cppcheck-report.xml
+        cppcheck --enable=all src
 
-    - name: 静态代码分析
-      run: |
-        mkdir -p reports
-        cppcheck --enable=all --xml-version=2 src/ 2> reports/cppcheck-report-${{ matrix.os }}.xml
-
-    - name: 上传分析报告
-      uses: actions/upload-artifact@v4
+    - name: Upload cppcheck results
+      uses: actions/upload-artifact@v3
       with:
-        name: cppcheck-reports-${{ matrix.os }}
-        path: reports/
+        name: cppcheck-report-${{ matrix.os }}
+        path: cppcheck-report.xml
 
-    - name: 构建Linux版本
-      if: matrix.os == 'ubuntu-latest'
+    - name: Build project
       run: |
-        make linux
-        ls -lh bin/  # 验证构建产物存在
+        make clean
+        make all
 
-    - name: 构建Windows版本
-      if: matrix.os == 'windows-latest'
-      run: |
-        make windows
-        dir bin\  # Windows验证构建产物
-
-    - name: 发布Nightly版本
-      uses: softprops/action-gh-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
       with:
-        tag_name: nightly-$(date -u +'%Y%m%d')
-        name: Nightly Build $(date -u +'%Y-%m-%d')
-        body: "包含静态分析报告的每日构建版本"
-        draft: false
-        prerelease: true
-        files: |
-          bin/hello-world.exe
-          bin/hello-world
+        name: nightly-build-${{ matrix.os }}
+        path: hello_world${{ matrix.os == 'windows-latest' && '.exe' || '' }}
