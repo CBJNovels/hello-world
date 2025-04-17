@@ -1,50 +1,98 @@
-name: Tag-based Release
+name: Release Build
 
 on:
-  create:
+  push:
     tags:
-      - "*"
+      - 'v*.*.*'  # 匹配语义化版本标签，如v1.0.0
+
+# 必须的发布权限配置
+permissions:
+  contents: write  # 允许创建release和tag
 
 jobs:
-  tag-release:
+  build:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-
-    runs-on: ${{ matrix.os }}
-
+    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    - name: 检出代码
+      uses: actions/checkout@v4
 
-    - name: Install cppcheck
+    - name: 准备构建目录
+      run: mkdir -p bin  # 确保输出目录存在
+
+    - name: 安装依赖（Windows）
+      if: matrix.os == 'windows-latest'
       run: |
-        if [ ${{ runner.os }} == 'Linux' ]; then
-          sudo apt-get install -y cppcheck;
-        elif [ ${{ runner.os }} == 'Windows' ]; then
-          choco install cppcheck;
-        fi
+        choco install mingw -y
+        choco install cppcheck -y
 
-    - name: Run cppcheck
+    - name: 安装依赖（Linux）
+      if: matrix.os == 'ubuntu-latest'
       run: |
-        cppcheck --enable=all --xml --xml-version=2 src 2> cppcheck-report.xml
-        cppcheck --enable=all src
+        sudo apt-get update
+        sudo apt-get install -y cppcheck
 
-    - name: Upload cppcheck results
-      uses: actions/upload-artifact@v3
+    - name: 静态代码分析
+      run: |
+        mkdir -p reports
+        cppcheck --enable=all --xml-version=2 src/ 2> reports/cppcheck-report-${{ matrix.os }}.xml
+
+    - name: 上传分析报告
+      uses: actions/upload-artifact@v4
       with:
-        name: cppcheck-report-${{ matrix.os }}
-        path: cppcheck-report.xml
+        name: release-cppcheck-reports-${{ matrix.os }}
+        path: reports/
 
-    - name: Build project
+    - name: 构建验证（Linux）
+      if: matrix.os == 'ubuntu-latest'
       run: |
-        make clean
-        make all
+        make linux
+        ls -lh bin/  # 验证构建产物存在
+        file bin/hello-world  # 验证文件类型
 
-    - name: Create Release
-      uses: ncipollo/release-action@v1
+    - name: 构建验证（Windows）
+      if: matrix.os == 'windows-latest'
+      run: |
+        make windows
+        dir bin\  # 显示目录内容
+        powershell -command "Get-Item bin\hello-world.exe | Select-Object FullName,Length"
+
+    - name: 发布正式版本
+      uses: softprops/action-gh-release@v2  # 使用最新v2版本
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        artifacts: hello_world${{ matrix.os == 'windows-latest' && '.exe' || '' }}
-        token: ${{ secrets.GITHUB_TOKEN }}
-        tag: ${{ github.ref_name }}
+        tag_name: ${{ github.ref_name }}
         name: Release ${{ github.ref_name }}
+        body: |  # 多行描述支持
+          ### 稳定版本发布
+          - 构建时间: ${{ github.event.head_commit.timestamp }}
+          - 提交信息: ${{ github.event.head_commit.message }}
+        draft: false
+        prerelease: false
+        files: |
+          ${{ github.workspace }}/bin/hello-world.exe
+          ${{ github.workspace }}/bin/hello-world
+        retries: 3  # 显式声明重试次数
+        retry_wait: 5000  # 重试间隔(ms)
+        fail_on_unmatched_files: true  # 文件缺失时失败
+
+# 错误处理工作流
+error-handler:
+  needs: build
+  if: ${{ failure() }}
+  runs-on: ubuntu-latest
+  steps:
+    - name: 发送构建失败通知
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '🚨 Release构建失败！请检查 [工作流运行](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
+          })
