@@ -2,8 +2,12 @@ name: Nightly Build
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 每日UTC时间00:00触发
+    - cron: '0 0 * * *'  # 每天UTC时间00:00触发
   workflow_dispatch:     # 允许手动触发
+
+# 添加必要权限
+permissions:
+  contents: write  # 必须的发布权限
 
 jobs:
   build:
@@ -16,17 +20,20 @@ jobs:
     - name: 检出代码
       uses: actions/checkout@v4
 
+    - name: 设置输出目录
+      run: mkdir -p bin  # 确保输出目录存在
+
     - name: 安装依赖（Windows）
       if: matrix.os == 'windows-latest'
       run: |
-        choco install mingw -y  # 安装Mingw编译器
-        choco install cppcheck -y  # 安装静态分析工具
+        choco install mingw -y
+        choco install cppcheck -y
 
     - name: 安装依赖（Linux）
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y cppcheck  # 安装静态分析工具
+        sudo apt-get install -y cppcheck
 
     - name: 静态代码分析
       run: |
@@ -34,7 +41,7 @@ jobs:
         cppcheck --enable=all --xml-version=2 src/ 2> reports/cppcheck-report-${{ matrix.os }}.xml
 
     - name: 上传分析报告
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v3
       with:
         name: cppcheck-reports-${{ matrix.os }}
         path: reports/
@@ -43,11 +50,13 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         make linux
+        ls -lh bin/  # 验证构建产物存在
 
     - name: 构建Windows版本
       if: matrix.os == 'windows-latest'
       run: |
         make windows
+        dir bin\  # Windows验证构建产物
 
     - name: 发布Nightly版本
       uses: softprops/action-gh-release@v1
