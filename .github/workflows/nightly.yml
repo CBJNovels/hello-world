@@ -57,7 +57,7 @@ jobs:
         name: "Nightly Build (${{ steps.tag.outputs.TAG_NAME }})"
         body: |
           ### 每日构建版本
-          - 构建时间: $(date -u +'%Y-%m-%d %H:%M:%S')
+          - 构建时间: ${{ steps.time.outputs.date_human }}
           - 包含以下文件:
             - hello-world (Linux)
             - hello-world.exe (Windows)
