@@ -48,6 +48,10 @@ jobs:
         git tag -a $TAG_NAME -m "Nightly build $CURRENT_DATE"
         git push origin $TAG_NAME
 
+    - name: Get current date
+      id: time
+      run: echo "date_human=$(date -u +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+  
     - name: Publish release
       uses: softprops/action-gh-release@v2
       env:
@@ -57,7 +61,7 @@ jobs:
         name: "Nightly Build (${{ steps.tag.outputs.TAG_NAME }})"
         body: |
           ### 每日构建版本
-          - 构建时间: ${{ steps.time.outputs.date_human }}
+          - 构建时间: ${{ env.date_human }}
           - 包含以下文件:
             - hello-world (Linux)
             - hello-world.exe (Windows)
