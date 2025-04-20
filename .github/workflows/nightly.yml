@@ -38,7 +38,7 @@ jobs:
           -f sha="$COMMIT_SHA"
 
     - name: Get current date
-      run: echo "date_human=$(date -u +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+      run: echo "date_human=$(TZ='Asia/Shanghai' date -u +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
   
     - name: Publish release
       uses: softprops/action-gh-release@v2
