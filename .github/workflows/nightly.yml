@@ -27,6 +27,8 @@ jobs:
 
     - name: Create git tag
       id: tag
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         TZ='Asia/Shanghai' CURRENT_DATE=$(date -u +'%Y-%m-%d')
         TAG_NAME="nightly-$CURRENT_DATE"
@@ -62,5 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Cleanup old nightly releases
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         gh release list | grep nightly | tail -n +31 | awk '{print $1}' | xargs -I {} gh release delete {} --yes
