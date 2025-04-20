@@ -29,7 +29,7 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        CURRENT_DATE=$(TZ='Asia/Shanghai' date -u +'%Y-%m-%d')
+        CURRENT_DATE=$(TZ='Asia/Shanghai' date +'%Y-%m-%d')
         TAG_NAME="nightly-$CURRENT_DATE"
         echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
         COMMIT_SHA=$(git rev-parse HEAD)
@@ -38,7 +38,7 @@ jobs:
           -f sha="$COMMIT_SHA"
 
     - name: Get current date
-      run: echo "date_human=$(TZ='Asia/Shanghai' date -u +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+      run: echo "date_human=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
   
     - name: Publish release
       uses: softprops/action-gh-release@v2
