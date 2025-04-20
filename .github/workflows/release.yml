@@ -3,96 +3,152 @@ name: Release Build
 on:
   push:
     tags:
-      - 'v*.*.*'  # 匹配语义化版本标签，如v1.0.0
+      - 'v*.*.*'  # 严格匹配语义化版本标签（如v1.0.0）
 
-# 必须的发布权限配置
+# 必须的权限配置
 permissions:
-  contents: write  # 允许创建release和tag
+  contents: write  # 允许创建release和上传文件
+  checks: write    # 允许提交检查结果
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
-    
+        os: [ubuntu-latest, windows-latest]  # 双平台构建
+        include:
+          - os: ubuntu-latest
+            target: linux
+            artifact: hello-world
+          - os: windows-latest
+            target: windows
+            artifact: hello-world.exe
+
     steps:
-    - name: 检出代码
+    # ---------- 初始化步骤 ---------- 
+    - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整提交历史（用于自动生成changelog）
 
-    - name: 准备构建目录
-      run: mkdir -p bin  # 确保输出目录存在
-
-    - name: 安装依赖（Windows）
-      if: matrix.os == 'windows-latest'
+    # ---------- 环境准备 ----------
+    - name: Create output directory
       run: |
-        choco install mingw -y
-        choco install cppcheck -y
+        mkdir -p bin
+        echo "BIN_PATH=${{ github.workspace }}/bin" >> $GITHUB_ENV
 
-    - name: 安装依赖（Linux）
+    # ---------- 依赖安装 ----------
+    - name: Install build tools (Linux)
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y cppcheck
+        sudo apt-get install -y \
+          gcc \
+          cppcheck \
+          mingw-w64  # Windows交叉编译支持
 
-    - name: 静态代码分析
-      run: |
-        mkdir -p reports
-        cppcheck --enable=all --xml-version=2 src/ 2> reports/cppcheck-report-${{ matrix.os }}.xml
-
-    - name: 上传分析报告
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-cppcheck-reports-${{ matrix.os }}
-        path: reports/
-
-    - name: 构建验证（Linux）
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        make linux
-        ls -lh bin/  # 验证构建产物存在
-        file bin/hello-world  # 验证文件类型
-
-    - name: 构建验证（Windows）
+    - name: Install build tools (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        make windows
-        dir bin\  # 显示目录内容
-        powershell -command "Get-Item bin\hello-world.exe | Select-Object FullName,Length"
+        choco install -y \
+          mingw \
+          cppcheck
 
-    - name: 发布正式版本
-      uses: softprops/action-gh-release@v2  # 使用最新v2版本
+    # ---------- 静态代码分析 ----------
+    - name: Run cppcheck
+      run: |
+        mkdir -p reports
+        cppcheck \
+          --enable=all \
+          --platform=unix64 \
+          --xml-version=2 \
+          --output-file=reports/cppcheck-${{ matrix.os }}.xml \
+          src/
+      continue-on-error: true  # 分析失败不中断构建
+
+    # ---------- 构建阶段 ----------
+    - name: Build executable
+      run: |
+        case ${{ matrix.os }} in
+          ubuntu-latest)
+            gcc src/main.c -o "$BIN_PATH/${{ matrix.artifact }}"
+            file "$BIN_PATH/${{ matrix.artifact }}"  # 验证文件类型
+            ;;
+          windows-latest)
+            x86_64-w64-mingw32-gcc src/main.c -o "$BIN_PATH/${{ matrix.artifact }}"
+            ;;
+        esac
+
+    # ---------- 构建验证 ----------
+    - name: Validate artifacts
+      run: |
+        echo "当前工作目录: $(pwd)"
+        echo "构建产物列表:"
+        ls -l "$BIN_PATH"
+        
+        # 严格检查文件存在
+        if [ ! -f "$BIN_PATH/${{ matrix.artifact }}" ]; then
+          echo "::error::构建产物缺失: $BIN_PATH/${{ matrix.artifact }}"
+          exit 1
+        fi
+
+    # ---------- 发布阶段 ----------
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-artifacts-${{ matrix.os }}
+        path: |
+          ${{ env.BIN_PATH }}/${{ matrix.artifact }}
+          reports/cppcheck-${{ matrix.os }}.xml
+
+    # ---------- 创建正式版本 ----------
+    - name: Create GitHub Release
+      if: matrix.os == 'ubuntu-latest'  # 只在Linux环境执行一次
+      uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ github.ref_name }}
-        name: Release ${{ github.ref_name }}
-        body: |  # 多行描述支持
-          ### 稳定版本发布
-          - 构建时间: ${{ github.event.head_commit.timestamp }}
-          - 提交信息: ${{ github.event.head_commit.message }}
+        name: ${{ github.ref_name }}
+        body: |
+          ## 版本发布说明
+          **构建时间:** ${{ steps.get_timestamp.outputs.timestamp }}
+          **提交信息:**  
+          ```plaintext
+          ${{ github.event.head_commit.message }}
+          ```
+          
+          ### 包含内容
+          - Linux可执行文件 (`hello-world`)
+          - Windows可执行文件 (`hello-world.exe`)
+          - Cppcheck分析报告
         draft: false
         prerelease: false
         files: |
-          ${{ github.workspace }}/bin/hello-world.exe
-          ${{ github.workspace }}/bin/hello-world
-        retries: 3  # 显式声明重试次数
-        retry_wait: 5000  # 重试间隔(ms)
-        fail_on_unmatched_files: true  # 文件缺失时失败
+          ${{ env.BIN_PATH }}/*
+          reports/*.xml
+        generate_release_notes: true  # 自动生成发布说明
+        discussion_category_name: "Announcements"  # 关联讨论分类
 
-# 错误处理工作流
-error-handler:
-  needs: build
-  if: ${{ failure() }}
-  runs-on: ubuntu-latest
-  steps:
-    - name: 发送构建失败通知
-      uses: actions/github-script@v6
-      with:
-        script: |
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: '🚨 Release构建失败！请检查 [工作流运行](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
-          })
+    # ---------- 辅助步骤 ----------
+    - name: Get timestamp
+      id: get_timestamp
+      run: echo "timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+
+# ---------- 错误处理 ----------
+  notify-failure:
+    needs: build-and-release
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure notification
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚨 版本发布失败！  
+              错误详情: [查看工作流](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+            })
