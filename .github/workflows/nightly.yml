@@ -26,7 +26,6 @@ jobs:
         make
 
     - name: Create git tag
-      id: tag
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
@@ -39,7 +38,6 @@ jobs:
           -f sha="$COMMIT_SHA"
 
     - name: Get current date
-      id: time
       run: echo "date_human=$(date -u +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
   
     - name: Publish release
