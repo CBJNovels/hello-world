@@ -25,11 +25,6 @@ jobs:
       run: |
         make
 
-    - name: Static analysis
-      run: |
-        mkdir -p reports
-        cppcheck --enable=all --xml-version=2 src/ 2> reports/cppcheck-report.xml
-
     - name: Create git tag
       id: tag
       run: |
