@@ -25,22 +25,13 @@ jobs:
       run: |
         make
 
-    - name: Authenticate with GitHub CLI
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        echo $GITHUB_TOKEN | gh auth login --with-token
-
     - name: Create git tag
       id: tag
       run: |
         TZ='Asia/Shanghai' CURRENT_DATE=$(date -u +'%Y-%m-%d')
         TAG_NAME="nightly-$CURRENT_DATE"
-        gh auth setup-git
-        gh repo clone ${{ github.repository }} temp-repo
-        cd temp-repo
-        git tag -a $TAG_NAME -m "Nightly build $CURRENT_DATE"
-        git push origin $TAG_NAME
+        gh repo view ${{ github.repository }}
+        gh release create $TAG_NAME --notes "Nightly build $CURRENT_DATE"
 
     - name: Get current date
       id: time
