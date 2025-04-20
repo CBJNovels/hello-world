@@ -35,7 +35,7 @@ make clean    # 清理构建产物
 3. 在"Artifacts"部分下载报告
 
 ### 版本发布
-- 每日构建：自动生成nightly版本
+- 每日构建：每晚北京时间0点自动触发构建nightly版本
 - 正式发布：创建v开头的tag（如v1.0.0）触发
 
 ## 项目结构
@@ -48,7 +48,7 @@ hello-world/
 └── README.md        # 项目文档
 ```
 
-## 开发要求
+## 依赖要求
 - GCC (Linux)
 - MinGW-w64 (Windows)
 - Make 4.0+

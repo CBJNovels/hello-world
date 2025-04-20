@@ -2,7 +2,7 @@ name: Nightly Build
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 每天UTC时间00:00触发
+    - cron: '0 16 * * *'  # 每天UTC时间00:00触发
   workflow_dispatch:
 
 permissions:
@@ -16,21 +16,20 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Run cppcheck
+      uses: actions-cool/cppcheck-action@v2
+      with:
+        enable: --enable=all
+        output: report.xml
+
     - name: Setup build env
       run: |
-        mkdir -p bin
         sudo apt-get update
-        sudo apt-get install -y gcc mingw-w64 cppcheck
+        sudo apt-get install -y gcc mingw-w64
 
     - name: Cross-platform build
       run: |
-        # Linux构建
-        gcc src/main.c -o bin/hello-world
-        # Windows交叉编译
-        x86_64-w64-mingw32-gcc src/main.c -o bin/hello-world.exe
-        # 验证构建产物
-        file bin/hello-world*
-        ls -lh bin/
+        make
 
     - name: Static analysis
       run: |
@@ -40,11 +39,11 @@ jobs:
     - name: Create git tag
       id: tag
       run: |
-        CURRENT_DATE=$(date -u +'%Y-%m-%d')  # 使用标准日期格式
+        TZ='Asia/Shanghai' CURRENT_DATE=$(date -u +'%Y-%m-%d')
         TAG_NAME="nightly-$CURRENT_DATE"
-        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
+        gh auth setup-git
+        gh repo clone ${{ github.repository }} temp-repo
+        cd temp-repo
         git tag -a $TAG_NAME -m "Nightly build $CURRENT_DATE"
         git push origin $TAG_NAME
 
@@ -68,6 +67,14 @@ jobs:
         draft: false
         prerelease: true
         files: |
-          bin/hello-world
-          bin/hello-world.exe
+          hello-world
+          hello-world.exe
         fail_on_unmatched_files: true
+
+  clean:
+    needs: build-and-publish
+    runs-on: ubuntu-latest
+    steps:
+    - name: Cleanup old nightly releases
+      run: |
+        gh release list | grep nightly | tail -n +31 | awk '{print $1}' | xargs -I {} gh release delete {} --yes
