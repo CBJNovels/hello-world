@@ -30,10 +30,12 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        TZ='Asia/Shanghai' CURRENT_DATE=$(date -u +'%Y-%m-%d')
+        CURRENT_DATE=$(TZ='Asia/Shanghai' date -u +'%Y-%m-%d')
         TAG_NAME="nightly-$CURRENT_DATE"
-        gh repo view ${{ github.repository }}
-        gh release create $TAG_NAME --notes "Nightly build $CURRENT_DATE"
+        COMMIT_SHA=$(git rev-parse HEAD)
+        gh api repos/${{ github.repository }}/git/refs \
+          -f ref="refs/tags/$TAG_NAME" \
+          -f sha="$COMMIT_SHA"
 
     - name: Get current date
       id: time
