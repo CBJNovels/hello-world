@@ -46,7 +46,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ env.TAG_NAME }}
-        name: "Nightly Build (${{ senv.TAG_NAME }})"
+        name: "Nightly Build (${{ env.TAG_NAME }})"
         body: |
           ### 每日构建版本
           - 构建时间: ${{ env.date_human }}
