@@ -32,6 +32,7 @@ jobs:
       run: |
         CURRENT_DATE=$(TZ='Asia/Shanghai' date -u +'%Y-%m-%d')
         TAG_NAME="nightly-$CURRENT_DATE"
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
         COMMIT_SHA=$(git rev-parse HEAD)
         gh api repos/${{ github.repository }}/git/refs \
           -f ref="refs/tags/$TAG_NAME" \
@@ -46,8 +47,8 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ steps.tag.outputs.TAG_NAME }}
-        name: "Nightly Build (${{ steps.tag.outputs.TAG_NAME }})"
+        tag_name: ${{ env.TAG_NAME }}
+        name: "Nightly Build (${{ senv.TAG_NAME }})"
         body: |
           ### 每日构建版本
           - 构建时间: ${{ env.date_human }}
