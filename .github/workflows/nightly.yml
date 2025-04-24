@@ -1,8 +1,8 @@
 name: Nightly Build
 
 on:
-  schedule:
-    - cron: '0 16 * * *'  # 每天UTC时间00:00触发
+  # schedule:
+  #   - cron: '0 16 * * *'  # 每天UTC时间00:00触发
   workflow_dispatch:
 
 permissions:
